@@ -27,15 +27,17 @@ import boto3
 # aws_secret_access_key = SECRET_KEY
 
 # Local imports
+
 os.chdir(os.path.join(os.path.expanduser('~'), "Projects/PaddockTS"))
 from DAESIM_preprocess.util import create_bbox, transform_bbox, scratch_dir, gdata_dir
 # endregion
 
-canopy_height_dir ='/g/data/xe2/datasets/Global_Canopy_Height'
+canopy_height_dir_new ='/g/data/xe2/datasets/Global_Canopy_Height_writeable'
 
 def identify_relevant_tiles(lat=-34.3890427, lon=148.469499, buffer=0.005):
     """Find the tiles that overlap with the region of interest"""
-    tiles_geojson_filename = os.path.join(canopy_height_dir, 'tiles_global.geojson')
+    tiles_geojson_filename = os.path.join(canopy_height_dir_new, 'tiles_global.geojson')
+    print(tiles_geojson_filename)
     gdf = gpd.read_file(tiles_geojson_filename)
     bbox = create_bbox(lat, lon, buffer)
     roi_coords = box(*bbox)
@@ -54,7 +56,7 @@ def download_new_tiles(tiles):
     # Find tiles we haven't downloaded yet
     to_download = []
     for tile in tiles:
-        tile_path = os.path.join(canopy_height_dir, f"{tile}.tif")
+        tile_path = os.path.join(canopy_height_dir_new, f"{tile}.tif") 
         if not os.path.isfile(tile_path):
             to_download.append(tile)
             
@@ -69,12 +71,13 @@ def download_new_tiles(tiles):
     for tile in to_download:
         bucket_name = 'dataforgood-fb-data'
         file_key = f'forests/v1/alsgedi_global_v6_float/chm/{tile}.tif'
-        local_file_path = os.path.join(canopy_height_dir, f'{tile}.tif')
+        local_file_path = os.path.join(canopy_height_dir_new, f'{tile}.tif')  
         s3.download_file(bucket_name, file_key, local_file_path)
         print("Downloaded:", local_file_path)
+        
 
 
-def merge_tiles(lat=-34.3890427, lon=148.469499, buffer=0.005, outdir="/g/data/xe2/cb8590/", stub="Test", tmp_dir='/scratch/xe2/cb8590/tmp'):
+def merge_tiles(lat=-34.3890427, lon=148.469499, buffer=0.005, outdir="/g/data/xe2/tbb801/", stub="Test", tmp_dir='/scratch/xe2/tbb801/tmp'):
     """Create a tiff file with just the region of interest. This may use just one tile, or merge multiple tiles"""
     
     # Convert the bounding box to EPSG:3857 (tiles.geojson uses EPSG:4326, but the tiff files use EPSG:3857')
@@ -87,7 +90,7 @@ def merge_tiles(lat=-34.3890427, lon=148.469499, buffer=0.005, outdir="/g/data/x
     
     # Crop the images and save a cropped tiff file for each one
     for tile in relevant_tiles:
-        tiff_file = os.path.join(canopy_height_dir, f'{tile}.tif')
+        tiff_file = os.path.join(canopy_height_dir_new, f'{tile}.tif')
         with rasterio.open(tiff_file) as src:
             out_image, out_transform = rasterio.mask.mask(src, [mapping(roi_polygon_3857)], crop=True)
             out_meta = src.meta.copy()
@@ -129,29 +132,59 @@ def merge_tiles(lat=-34.3890427, lon=148.469499, buffer=0.005, outdir="/g/data/x
 
 
 def visualise_canopy_height(filename, outpath=scratch_dir, stub="Test"):
-    """Pretty visualisation of the canopy height"""
-
+    """Pretty visualisation of the canopy height with both PNG and GeoTIFF outputs"""
+    print("Input tif filename =", filename)
     with rasterio.open(filename) as src:
         image = src.read(1)  
-        transform = src.transform 
-    
-    # Bin the slope into categories
+        transform = src.transform
+        crs = src.crs
+        
     bin_edges = np.arange(0, 16, 1) 
     categories = np.digitize(image, bin_edges, right=True)
     
-    # Define a color for each category
+    # Save the categorized data as GeoTIFF
+    geotiff_filename = os.path.join(outpath, f"{stub}_canopy_height_categories.tif")
+    print("geotiff_filename=", geotiff_filename)
+    with rasterio.open(
+        geotiff_filename,
+        'w',
+        driver='GTiff',
+        height=categories.shape[0],
+        width=categories.shape[1],
+        count=1,
+        dtype=categories.dtype,
+        crs=crs,
+        transform=transform,
+    ) as dst:
+        dst.write(categories, 1)
+    print("Saved geotiff as:", geotiff_filename)
+    
+    # Save the original canopy height data as GeoTIFF
+    geotiff_filename_raw = os.path.join(outpath, f"{stub}_canopy_height_raw.tif")
+    with rasterio.open(
+        geotiff_filename_raw,
+        'w',
+        driver='GTiff',
+        height=image.shape[0],
+        width=image.shape[1],
+        count=1,
+        dtype=image.dtype,
+        crs=crs,
+        transform=transform,
+    ) as dst:
+        dst.write(image, 1)
+    print("Saved raw tif as:", geotiff_filename_raw)
+    
+    # Create PNG visualization
     colours = plt.cm.viridis(np.linspace(0, 1, len(bin_edges) - 2))
     cmap = colors.ListedColormap(['white'] + list(colours))
     
-    # Plot the values
     fig, ax = plt.subplots(figsize=(8, 6))
     im = ax.imshow(categories, cmap=cmap)
     
-    # Assign the colours
     labels = [f'{bin_edges[i]}' for i in range(len(bin_edges))]
     labels[-1] = '>=15'
     
-    # Place the tick label in the middle of each category
     num_categories = len(bin_edges)
     start_position = 0.5
     end_position = num_categories + 0.5
@@ -163,12 +196,12 @@ def visualise_canopy_height(filename, outpath=scratch_dir, stub="Test"):
     
     plt.title('Canopy Height (m)', size=14)
     plt.tight_layout()
-    filename = os.path.join(outpath, f"{stub}_canopy_height.png")
-    plt.savefig(filename)
-    print("Saved", filename)
+    png_filename = os.path.join(outpath, f"{stub}_canopy_height.png")
+    plt.savefig(png_filename)
+    print("Saved PNG as:", png_filename)
     plt.show()
 
-def canopy_height(lat=-34.3890427, lon=148.469499, buffer=0.005, outdir=scratch_dir, stub="Test", tmp_dir='/scratch/xe2/cb8590/tmp'):
+def canopy_height(lat=-34.3890427, lon=148.469499, buffer=0.005, outdir=scratch_dir, stub="Test", tmp_dir='/scratch/xe2/tbb801/tmp'):
     """Create a merged canopy height raster, downloading new tiles if necessary"""
     tiles = identify_relevant_tiles(lat, lon, buffer)
     download_new_tiles(tiles)
@@ -178,6 +211,6 @@ def canopy_height(lat=-34.3890427, lon=148.469499, buffer=0.005, outdir=scratch_
 # %%time
 if __name__ == '__main__':
     # canopy_height()
-    visualise_canopy_height("/g/data/xe2/cb8590/Data/PadSeg/MILG_canopy_height.tif")
+    visualise_canopy_height("/g/data/xe2/tbb801/Data/PadSeg/MILG_canopy_height.tif")
 
 

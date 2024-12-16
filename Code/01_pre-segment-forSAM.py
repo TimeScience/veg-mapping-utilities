@@ -41,26 +41,12 @@ import hdstats
 # Adjust logging configuration for the script
 logging.basicConfig(level=logging.INFO)
 
-# This line of code determines if the data is downloaded from the NCI project or from the AWS version of the same data
-# Set AWS environment variable for public access:
-os.environ["AWS_NO_SIGN_REQUEST"] = "YES" # Comment this out if you want to download data from NCI rather than AWS
-
-def str2bool(v): #required because passing booleans to python from bash seems to be impossible without hours of suffering
-    """Convert string to boolean"""
-    if isinstance(v, bool):
-        return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
-        
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="""Download and save Sentinel data, prepare input image for SAMGeo.
-        Example usage:
-        python3 Code/01_pre-segment.py --stub test1 --outdir /g/data/xe2/John/Data/PadSeg/ --lat -34.3890 --lon 148.4695 --buffer 0.01 --start_time '2020-01-01' --end_time '2020-03-31'""",
+        
+Example usage:
+python3 Code/01_pre-segment.py --stub test1 --outdir /g/data/xe2/John/Data/PadSeg/ --lat -34.3890 --lon 148.4695 --buffer 0.01 --start_time '2020-01-01' --end_time '2020-03-31'""",
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("--stub", type=str, required=True, help="Stub name for file naming")
@@ -70,25 +56,9 @@ def parse_arguments():
     parser.add_argument("--buffer", type=float, required=True, help="Buffer in degrees to define the area around the center point")
     parser.add_argument("--start_time", type=str, required=True, help="Start time for the data query (YYYY-MM-DD)")
     parser.add_argument("--end_time", type=str, required=True, help="End time for the data query (YYYY-MM-DD)")
-    parser.add_argument("--use_geojson", type=str2bool, required=True,
-                       help="Whether to use geojson (true) or lat/lon/buffer (false)")   
-    parser.add_argument("--geojson_path", type=str, required=False, help="Path to geojson file containing bounding box")
-
-    args = parser.parse_args()
-    # Validate arguments based on use_geojson
-    logging.info(f"args =  {args}")
-    if args.use_geojson == True:
-        logging.info(f"args.use_geojson =  {args}")
-        if not args.geojson_path:
-            parser.error("--geojson_path is required when use_geojson=1")
-    else:
-        logging.info(f"else part 2: args.use_geojson =  {args.use_geojson}")
-        if None in (args.lat, args.lon, args.buffer):
-            parser.error("--lat, --lon, and --buffer are required when use_geojson=0")
-            
     return parser.parse_args()
 
-def define_query_lat_lon(lat, lon, buffer, time_range):
+def define_query(lat, lon, buffer, time_range):
     lat_range = (lat-buffer, lat+buffer)
     lon_range = (lon-buffer, lon+buffer)
     query = {
@@ -102,43 +72,6 @@ def define_query_lat_lon(lat, lon, buffer, time_range):
     }
     # note that centre is not recognized as query option in load_arc, but we want to output it as a record.
     return query
-
-#Use this if we are passing a bounding box
-def define_query_bbox(x_range, y_range, time_range):
-    """Define query using bounding box coordinates"""
-    query = {
-        'x': x_range,
-        'y': y_range,
-        'time': time_range,
-        'resolution': (-10, 10),
-        'output_crs': 'epsg:6933',
-        'group_by': 'solar_day'
-    }
-    return query
-    
-def get_bbox_coords(geojson_path):
-    """Extract bounding box coordinates from geojson file"""
-    import json
-    
-    with open(geojson_path) as f:
-        geojson = json.load(f)
-    
-    # Access the first feature's geometry
-    coords = geojson['features'][0]['geometry']['coordinates'][0]
-    
-    # Get min/max x and y coordinates
-    x_coords = [coord[0] for coord in coords]
-    y_coords = [coord[1] for coord in coords]
-    
-    x_range = (min(x_coords), max(x_coords))
-    y_range = (min(y_coords), max(y_coords))
-    
-    print(f"Extracted bounding box coordinates:")
-    print(f"X range: {x_range}")
-    print(f"Y range: {y_range}")
-    
-    return x_range, y_range
-
 
 def load_and_process_data(dc, query):
     query = {k: v for k, v in query.items() if k != 'centre'} # this takes centre out of the query	
@@ -200,36 +133,19 @@ def export_for_segmentation(ds, inp, out_stub):
 def main(args):
     client = create_local_dask_cluster(return_client=True)
     dc = datacube.Datacube(app='Vegetation_phenology')
-    logging.info(f"args.use_geojson =  {args.use_geojson}")
-
-    if args.use_geojson:
-        logging.info(f"in use_geojson should be TRUE | use_geojson =  {args.use_geojson}")
-        # Get bounding box coordinates from geojson
-        x_range, y_range = get_bbox_coords(args.geojson_path) 
-        query = define_query_bbox(x_range, y_range, (args.start_time, args.end_time))
-    else:
-        logging.info(f"running lat lon query")
-        query = define_query_lat_lon(args.lat, args.lon, args.buffer, (args.start_time, args.end_time))
-    
-            
+    query = define_query(args.lat, args.lon, args.buffer, (args.start_time, args.end_time))
     ds = load_and_process_data(dc, query)
     client.close()
     f2 = transform(ds)
     im = rescale(f2)
     export_for_segmentation(ds, im, args.outdir+args.stub)
-    
     # save ds for later
-    outnamepath = os.path.join(args.outdir + '/sentinel-pkl', args.stub + '_ds2.pkl')
-    with open(outnamepath, 'wb') as handle:
+    with open(os.path.join(args.outdir, args.stub + '_ds2.pkl'), 'wb') as handle:
         pickle.dump(ds, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        
-    logging.info(f"Data saved successfully to {outnamepath}")
-
-# save query for record keeping
-    outnamepath = os.path.join(args.outdir + '/sentinel-pkl', args.stub + '_ds2_query.pkl')
-    with open(outnamepath, 'wb') as f:
+    logging.info(f"Data saved successfully to {args.outdir}")
+    # save query for record keeping
+    with open(os.path.join(args.outdir, args.stub + '_ds2_query.pkl'), 'wb') as f:
         pickle.dump(query, f)
-    logging.info(f"Query saved successfully to {outnamepath}")
 
 if __name__ == "__main__":
     args = parse_arguments()

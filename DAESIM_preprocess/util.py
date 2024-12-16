@@ -1,4 +1,4 @@
-# Standatd libraries
+# Standard libraries
 import os
 import resource
 

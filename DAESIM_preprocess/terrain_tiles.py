@@ -38,6 +38,7 @@ def run_gdalwarp(bbox=[148.464499, -34.394042, 148.474499, -34.3840426], filenam
     result = subprocess.run(command, capture_output=True, text=True)
     # print("Terrain Tiles STDOUT:", result.stdout, flush=True)
     # print("Terrain Tiles STDERR:", result.stderr, flush=True)
+    
     print(f"Downloaded {filename}")
 
 def interpolate_nan(filename="output.tif"):
@@ -110,6 +111,7 @@ def terrain_tiles(lat=-34.3890427, lon=148.469499, buffer=0.005, outdir="", stub
     # Load the raw data
     bbox = create_bbox(lat, lon, buffer)
     filename = os.path.join(tmp_dir, f"{stub}_terrain_original.tif")
+    print("terrain tiles filename =", filename)
     run_gdalwarp(bbox, filename)
 
     # Fix bad measurements
@@ -121,13 +123,16 @@ if __name__ == '__main__':
     # Choosing location
     lat, lon = -34.3890427, 148.469499
     buffer = 0.005  # 0.01 degrees is about 1km in each direction, so 2km total
-    stub = "MILG_1km"
+    stub = "test_1km"
 
     # Specify output destinations
     outdir = os.path.join(gdata_dir, "Data/PadSeg/")
     tmp_dir = os.path.join(scratch_dir, "tmp")
 
     # Download elevation from terrain tiles
+    print(outdir)
+    print(stub)
+    print(scratch_dir)
     terrain_tiles(lat, lon, buffer, outdir, stub, tmp_dir)
 
     # Visualise the downloaded data

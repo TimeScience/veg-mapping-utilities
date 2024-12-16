@@ -128,8 +128,15 @@ def catchment_ridges(grid, fdir, acc, full_branches):
 
     return ridges
 
-def show_acc(acc, outdir=scratch_dir, stub="Test"):
-    """Very pretty visualisation of water accumulation"""
+def show_acc(acc, outdir=scratch_dir, stub="Test", reference_tiff=None):
+    """Visualization of water accumulation"""
+    # Save as GeoTIFF
+    if reference_tiff:
+        geotiff_filename = os.path.join(outdir, f"{stub}_topographic_index.tif")
+        save_geotiff(acc, geotiff_filename, reference_tiff)
+        print("Saved:", geotiff_filename)
+    
+    # Original PNG visualization
     fig, ax = plt.subplots(figsize=(8,6))
     fig.patch.set_alpha(0)
     plt.grid('on', zorder=0)
@@ -140,70 +147,138 @@ def show_acc(acc, outdir=scratch_dir, stub="Test"):
     plt.colorbar(im, ax=ax, label='Upstream Cells')
     plt.title('Topographic Index', size=14)
     plt.tight_layout()
-    filename = os.path.join(outdir, f"{stub}_topographic_index.png")
-    plt.savefig(filename)
-    print("Saved:", filename)
-    plt.show()
+    png_filename = os.path.join(outdir, f"{stub}_topographic_index.png")
+    plt.savefig(png_filename)
+    print("Saved:", png_filename)
+    plt.close()
 
-
-def show_ridge_gullies(dem, ridges, gullies, outdir=scratch_dir, stub="Test"):
-    """Very pretty visualisation of ridges and gullies"""
+def show_ridge_gullies(dem, ridges, gullies, outdir=scratch_dir, stub="Test", reference_tiff=None):
+    """Visualization of ridges and gullies"""
+    # Save as GeoTIFF
+    if reference_tiff:
+        # Save ridges
+        ridge_filename = os.path.join(outdir, f"{stub}_ridges.tif")
+        save_geotiff(ridges.astype('uint8'), ridge_filename, reference_tiff)
+        print("Saved:", ridge_filename)
+        
+        # Save gullies
+        gully_filename = os.path.join(outdir, f"{stub}_gullies.tif")
+        save_geotiff(gullies.astype('uint8'), gully_filename, reference_tiff)
+        print("Saved:", gully_filename)
+    
+    # Original PNG visualization
     fig, ax = plt.subplots(figsize=(8, 6))
     fig.patch.set_alpha(0)
-    
-    # Plot the DEM
     im = ax.imshow(dem, cmap='terrain', zorder=1, interpolation='bilinear')
     plt.colorbar(im, ax=ax, label='Elevation (m)')
-    
-    # Overlay ridges and gullies
     ax.contour(ridges, levels=[0.5], colors='red', linewidths=1.5, zorder=2)
     ax.contour(gullies, levels=[0.5], colors='blue', linewidths=1.5, zorder=3)
     ax.contour(dem, colors='black', linewidths=0.5, zorder=4, alpha=0.5)
-
     plt.title('Ridges and Gullies', size=14)
     plt.tight_layout()
-    filename = os.path.join(outdir, f"{stub}_ridge_gullies.png")
-    plt.savefig(filename)
-    print("Saved:", filename)
-    plt.show()
-    
+    png_filename = os.path.join(outdir, f"{stub}_ridge_gullies.png")
+    plt.savefig(png_filename)
+    print("Saved:", png_filename)
+    plt.close()
 
+def show_aspect(fdir, outdir=scratch_dir, stub="Test", reference_tiff=None):
+    """Visualization of aspect"""
+    # Save as GeoTIFF
+    if reference_tiff:
+        geotiff_filename = os.path.join(outdir, f"{stub}_aspect.tif")
+        save_geotiff(fdir, geotiff_filename, reference_tiff)
+        print("Saved:", geotiff_filename)
 
-# -
-
-def show_aspect(fdir, outdir=scratch_dir, stub="Test"):
-    """Somewhat pretty visualisation of the aspect"""
-    
-    # These are the default ESRI directions
+    # Original visualization code...
     directions = {
-        64: "North",
-        128: "Northeast",
-        1: "East",
-        2: "Southeast",
-        4: "South",
-        8: "Southwest",
-        16: "West",
-        32: "Northwest",
-        -1: "East",
-        -2: "East"
+        64: "North", 128: "Northeast", 1: "East", 2: "Southeast",
+        4: "South", 8: "Southwest", 16: "West", 32: "Northwest",
+        -1: "East", -2: "East"
     }
     colour_dict = {
-                   "East": '#EE82EE',       # Violet
-                   "Southeast": '#00008B',  # Dark Blue
-                   "South": '#ADD8E6',      # Light Blue
-                   "Southwest": '#006400',  # Dark Green
-                   "West": '#90EE90',       # Light Green
-                   "Northwest": '#FFFF00',  # Yellow
-                   "North": '#FFA500',      # Orange
-                   "Northeast": '#DC143C',  # Crimson
-                  }
-
+        "East": '#EE82EE', "Southeast": '#00008B', "South": '#ADD8E6',
+        "Southwest": '#006400', "West": '#90EE90', "Northwest": '#FFFF00',
+        "North": '#FFA500', "Northeast": '#DC143C',
+    }
     fdir_categorized = np.vectorize(directions.get)(fdir)
-    filename = os.path.join(outdir, f"{stub}_aspect.png")
-    plot_categorical(fdir_categorized, colour_dict, "Aspect", filename)
+    png_filename = os.path.join(outdir, f"{stub}_aspect.png")
+    plot_categorical(fdir_categorized, colour_dict, "Aspect", png_filename)
 
+def show_slope(slope, outdir=scratch_dir, stub="Test", reference_tiff=None):
+    """Visualization of slope"""
+    # Save as GeoTIFF
+    if reference_tiff:
+        geotiff_filename = os.path.join(outdir, f"{stub}_slope.tif")
+        save_geotiff(slope, geotiff_filename, reference_tiff)
+        print("Saved:", geotiff_filename)
 
-# +
+    # Original PNG visualization
+    bin_edges = np.arange(0, 16, 1)
+    slope_categories = np.digitize(slope, bin_edges, right=True)
+    colours = plt.cm.viridis(np.linspace(0, 1, len(bin_edges) - 1))
+    cmap = colors.ListedColormap(colours)
+    
+    fig, ax = plt.subplots(figsize=(8, 6))
+    im = ax.imshow(slope_categories, cmap=cmap)
+    labels = [f'{bin_edges[i]}°' for i in range(len(bin_edges))]
+    cbar = plt.colorbar(im, ticks=np.arange(len(bin_edges)))
+    cbar.ax.set_yticklabels(labels)
+    plt.title('Slope', size=14)
+    plt.tight_layout()
+    png_filename = os.path.join(outdir, f"{stub}_slope.png")
+    plt.savefig(png_filename)
+    print("Saved:", png_filename)
+    plt.close()
+
+def visualise_canopy_height(filename, outdir=scratch_dir, stub="Test"):
+    """Visualization of canopy height"""
+    with rasterio.open(filename) as src:
+        canopy_height = src.read(1)
+        
+    # Save as GeoTIFF
+    geotiff_filename = os.path.join(outdir, f"{stub}_canopy_height.tif")
+    save_geotiff(canopy_height, geotiff_filename, filename)
+    print("Saved:", geotiff_filename)
+
+    # Original PNG visualization
+    fig, ax = plt.subplots(figsize=(8, 6))
+    im = ax.imshow(canopy_height, cmap='viridis')
+    plt.colorbar(im, ax=ax, label='Height (m)')
+    plt.title('Canopy Height', size=14)
+    plt.tight_layout()
+    png_filename = os.path.join(outdir, f"{stub}_canopy_height.png")
+    plt.savefig(png_filename)
+    print("Saved:", png_filename)
+    plt.close()
+
+def visualise_soil_texture(outdir_tb, outdir=scratch_dir, stub="Test"):
+    """Visualization of soil texture"""
+    filename = os.path.join(outdir_tb, f"{stub}_soil_texture.tif")
+    with rasterio.open(filename) as src:
+        soil_texture = src.read(1)
+        
+    # Save as GeoTIFF
+    geotiff_filename = os.path.join(outdir, f"{stub}_soil_texture.tif")
+    save_geotiff(soil_texture, geotiff_filename, filename)
+    print("Saved:", geotiff_filename)
+
+    # Original PNG visualization code...
+    # (Add your existing visualization code here)
+
+def visualise_soil_pH(outdir_tb, outdir=scratch_dir, stub="Test"):
+    """Visualization of soil pH"""
+    filename = os.path.join(outdir_tb, f"{stub}_soil_pH.tif")
+    with rasterio.open(filename) as src:
+        soil_pH = src.read(1)
+        
+    # Save as GeoTIFF
+    geotiff_filename = os.path.join(outdir, f"{stub}_soil_pH.tif")
+    save_geotiff(soil_pH, geotiff_filename, filename)
+    print("Saved:", geotiff_filename)
+
+    # Original PNG visualization code...
+    # (Add your existing visualization code here)
+
 def calculate_slope(tiff_file):
     """Calculate the slope of a DEM"""
     with rasterio.open(tiff_file) as src:
@@ -214,37 +289,28 @@ def calculate_slope(tiff_file):
     return slope
 
 
-def show_slope(slope, outdir=scratch_dir, stub="Test"):
-    """Somewhat pretty visualisation of the slope"""
-
-    # Bin the slope into categories
-    bin_edges = np.arange(0, 16, 1) 
-    slope_categories = np.digitize(slope, bin_edges, right=True)
-    
-    # Define a color for each category
-    colours = plt.cm.viridis(np.linspace(0, 1, len(bin_edges) - 1))
-    cmap = colors.ListedColormap(colours)
-    
-    # Plot the values
-    fig, ax = plt.subplots(figsize=(8, 6))
-    im = ax.imshow(slope_categories, cmap=cmap)
-    
-    # Assign the colours
-    labels = [f'{bin_edges[i]}°' for i in range(len(bin_edges))]
-    cbar = plt.colorbar(im, ticks=np.arange(len(bin_edges)))
-    cbar.ax.set_yticklabels(labels)
-    
-    plt.title('Slope', size=14)
-    plt.tight_layout()
-    filename = os.path.join(outdir, f"{stub}_slope.png")
-    plt.savefig(filename)
-    print("Saved:", filename)
-    plt.show()
+def save_geotiff(data, output_path, reference_tiff):
+    """
+    Save data as a GeoTIFF using the same spatial reference as reference_tiff
+    """
+    with rasterio.open(reference_tiff) as src:
+        transform = src.transform
+        crs = src.crs
+        
+    with rasterio.open(
+        output_path,
+        'w',
+        driver='GTiff',
+        height=data.shape[0],
+        width=data.shape[1],
+        count=1,
+        dtype=data.dtype,
+        crs=crs,
+        transform=transform,
+    ) as dst:
+        dst.write(data, 1)
 
 
-# -
-
-# %%time
 if __name__ == '__main__':
     filepath = "/g/data/xe2/cb8590/Data/PadSeg/MILG_terrain.tif"
     grid, dem, fdir, acc = pysheds_accumulation(filepath)

@@ -2,15 +2,15 @@
 
 ## Config:
 # specify working directory:
-wd=/home/106/jb5097/Projects/PaddockTS
+wd=/home/801/tbb801/Projects/PaddockTS
 # params
-stub=ADAMO
-dir=/g/data/xe2/John/Data/PadSeg/
-lat=-33.5040
-lon=148.6385
+stub=CRGU
+dir=/g/data/xe2/tbb801/Data/PadSeg
+lat=-35.217844
+lon=149.140914
 buffer=0.05
-start='2017-01-01'
-end_='2024-05-01'
+start='2015-01-01'
+end_='2024-12-31'
 # params for paddock filtering
 min_area_ha=10
 max_area_ha=1500
